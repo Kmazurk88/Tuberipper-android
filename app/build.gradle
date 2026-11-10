@@ -1,0 +1,33 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'app.tuberipper.player'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'app.tuberipper.player'
+        minSdk 26
+        // 34, not 35: Android 15 forces edge-to-edge on apps that target 35, which would draw the web page under the system bars.
+        targetSdk 34
+        versionCode 8
+        versionName '1.7'
+    }
+    buildFeatures { buildConfig true }
+    signingConfigs {
+        release {
+            storeFile file(System.getenv('TR_KEYSTORE') ?: 'missing.jks')
+            storePassword System.getenv('TR_KS_PASS')
+            keyAlias 'tuberipper'
+            keyPassword System.getenv('TR_KS_PASS')
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

@@ -16,6 +16,7 @@ import android.os.Looper;
 import android.text.InputType;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -30,6 +31,7 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,9 +39,15 @@ import java.util.List;
  *  things a browser tab can't: a foreground service for background audio (PlaybackService), a native
  *  media notification, the file picker for the Spotify CSV import, and a saved server address. */
 public class MainActivity extends Activity {
-    /** The service sends lock-screen / notification button presses into the page through this. */
-    static WebView web;
-    static MainActivity current;
+    /** The running activity, for the service (lock-screen / notification buttons go into its page) and the bridge.
+     *  A weak reference, so a finished activity and its WebView can be collected. */
+    private static WeakReference<MainActivity> currentRef = new WeakReference<>(null);
+    static MainActivity current() { return currentRef.get(); }
+    /** The page of the running activity, or null. */
+    static WebView page() { MainActivity a = current(); return a == null ? null : a.web; }
+
+    private WebView web;
+    private final List<Long> rendererDeaths = new ArrayList<>();
 
     private ValueCallback<Uri[]> fileCallback;
     private SharedPreferences prefs;
@@ -154,14 +162,22 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        current = this;
+        currentRef = new WeakReference<>(this);
         prefs = getSharedPreferences("tr", MODE_PRIVATE);
-        web = new WebView(this);
-        web.setBackgroundColor(0xFF121212);
+        CookieManager.getInstance().setAcceptCookie(true); // the login session lives in a cookie
+        web = buildWebView();
         setContentView(web);
 
-        CookieManager.getInstance().setAcceptCookie(true); // the login session lives in a cookie
+        if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2);
+        registerNetworkWatcher();
+        if (serverUrl() == null) showServerDialog(true);
+        else pickAndLoad(true);
+    }
 
+    /** The WebView with everything the app needs: settings, the TRNative bridge, link/file/error handling. */
+    private WebView buildWebView() {
+        final WebView web = new WebView(this);
+        web.setBackgroundColor(0xFF121212);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -195,6 +211,15 @@ public class MainActivity extends Activity {
                 }
             }
 
+            /** Android killed the page's renderer (low memory, or it crashed). Without this the app would close
+             *  (the default) or show a dead page. Build a new WebView and load the same address; the page restores
+             *  the queue from its saved copy. Gives up after 3 deaths within a minute (a page that always crashes). */
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                recoverRenderer(view);
+                return true;
+            }
+
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (!request.isForMainFrame()) return;
@@ -222,11 +247,28 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+        return web;
+    }
 
-        if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2);
-        registerNetworkWatcher();
-        if (serverUrl() == null) showServerDialog(true);
-        else pickAndLoad(true);
+    private void recoverRenderer(WebView dead) {
+        if (dead != web || isFinishing() || isDestroyed()) { if (dead != web) dead.destroy(); return; }
+        long now = System.currentTimeMillis();
+        rendererDeaths.add(now);
+        while (!rendererDeaths.isEmpty() && now - rendererDeaths.get(0) > 60000) rendererDeaths.remove(0);
+        PlaybackService.playing = false; // the page that was playing is gone; the new page reports again
+        if (dead.getParent() instanceof ViewGroup) ((ViewGroup) dead.getParent()).removeView(dead);
+        dead.destroy();
+        web = buildWebView();
+        setContentView(web);
+        if (rendererDeaths.size() > 3) {
+            web.loadDataWithBaseURL(null, "<body style='background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:26vh 24px 0'>"
+                    + "<h2>The app keeps stopping</h2><p style='color:#b3b3b3'>Close it and open it again.</p>"
+                    + "<p><a href='tr://retry' style='display:inline-block;background:#fff;color:#000;padding:12px 26px;"
+                    + "border-radius:999px;text-decoration:none;font-weight:700'>Try again</a></p></body>", "text/html", "utf-8", null);
+            return;
+        }
+        String base = currentBase != null ? currentBase : prefs.getString("last_base", serverUrl());
+        if (base != null) web.loadUrl(base);
     }
 
     /** When the phone's network changes (left home Wi-Fi, turned Tailscale on/off...), look for a better address. */
@@ -327,7 +369,7 @@ public class MainActivity extends Activity {
             PlaybackService.stop(this);
             web.destroy();
             web = null;
-            current = null;
+            if (currentRef.get() == this) currentRef = new WeakReference<>(null);
         }
         super.onDestroy();
     }

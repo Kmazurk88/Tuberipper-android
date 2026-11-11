@@ -31,7 +31,7 @@ public class NativeBridge {
 
     @JavascriptInterface
     public void changeServer() {
-        MainActivity a = MainActivity.current;
+        MainActivity a = MainActivity.current();
         if (a != null) a.showServerDialog(false);
     }
 
@@ -72,7 +72,7 @@ public class NativeBridge {
     @JavascriptInterface
     public void haptic(String kind) {
         main.post(() -> {
-            MainActivity a = MainActivity.current;
+            MainActivity a = MainActivity.current();
             if (a == null) return;
             int c = android.os.Build.VERSION.SDK_INT >= 30 ? android.view.HapticFeedbackConstants.CONFIRM : android.view.HapticFeedbackConstants.KEYBOARD_TAP;
             a.getWindow().getDecorView().performHapticFeedback(c);

@@ -174,7 +174,7 @@ public class PlaybackService extends Service {
 
     /** Sends a button press into the web page. */
     private void send(String cmd) {
-        final android.webkit.WebView w = MainActivity.web;
+        final android.webkit.WebView w = MainActivity.page();
         if (w == null || cmd == null) return;
         w.post(() -> w.evaluateJavascript("window.TRNative_cmd&&window.TRNative_cmd('" + cmd.replace("'", "") + "')", null));
     }

@@ -1,4 +1,4 @@
-plugins { id 'com.android.application' }
+plugins { alias(libs.plugins.android.application) }
 
 android {
     namespace 'app.tuberipper.player'
@@ -8,26 +8,50 @@ android {
         minSdk 26
         // 34, not 35: Android 15 forces edge-to-edge on apps that target 35, which would draw the web page under the system bars.
         targetSdk 34
-        versionCode 8
-        versionName '1.7'
+        versionCode 9
+        versionName '1.8'
     }
     buildFeatures { buildConfig true }
     signingConfigs {
-        release {
-            storeFile file(System.getenv('TR_KEYSTORE') ?: 'missing.jks')
-            storePassword System.getenv('TR_KS_PASS')
-            keyAlias 'tuberipper'
-            keyPassword System.getenv('TR_KS_PASS')
+        // Only when the keystore is given (TR_KEYSTORE + TR_KS_PASS): CI builds an unsigned release instead.
+        if (System.getenv('TR_KEYSTORE')) {
+            release {
+                storeFile file(System.getenv('TR_KEYSTORE'))
+                storePassword System.getenv('TR_KS_PASS')
+                keyAlias 'tuberipper'
+                keyPassword System.getenv('TR_KS_PASS')
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
-            minifyEnabled false
+            if (System.getenv('TR_KEYSTORE')) signingConfig signingConfigs.release
+            // R8: shrinks and optimizes. Names are kept (no obfuscation, see proguard-rules.pro) and the
+            // methods the web page calls through TRNative are kept explicitly.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+    lint {
+        abortOnError true          // a lint error fails the build
+        checkReleaseBuilds true
+        warningsAsErrors false
+        // Deliberate choices, explained where they are made:
+        disable 'OldTargetApi'     // targetSdk 34 on purpose (edge-to-edge, see above)
+        disable 'GradleDependency' // version bumps are done on purpose, not by lint
+        disable 'SetJavaScriptEnabled', 'JavascriptInterface' // the app IS a WebView around our own page
+    }
+    testOptions {
+        unitTests.all { testLogging { events 'failed'; exceptionFormat 'full' } }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    testImplementation libs.junit
+    testImplementation libs.orgjson
 }

@@ -106,6 +106,7 @@ public class PlaybackService extends Service {
         String newArt = cur.optString("art");
         if (!newArt.equals(artUrl)) { artUrl = newArt; art = null; loadArt(newArt); }
         boolean playing = cur.optBoolean("playing");
+        if (playing != PlaybackService.playing) Diagnostics.note(playing ? "playing" : "paused");
         PlaybackService.playing = playing;
 
         MediaMetadata.Builder md = new MediaMetadata.Builder()

@@ -54,7 +54,11 @@ public class MainActivity extends Activity {
     private static final int PICK_FILE = 1;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private String currentBase;          // the address currently loaded (home, Tailscale or public)
+    private volatile String currentBase;  // the address currently loaded (home, Tailscale or public)
+    private boolean diagChecked = false;
+
+    /** The address in use now (for problem reports), or null. */
+    String currentAddress() { return currentBase; }
     private boolean errorRetried = false;
     private boolean needRepick = false;
     private long lastPick = 0;
@@ -206,7 +210,11 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 if (url != null && url.startsWith("http")) {
                     errorRetried = false;
-                    if (currentBase != null) prefs.edit().putString("last_base", currentBase).apply();
+                    if (currentBase != null) {
+                        prefs.edit().putString("last_base", currentBase).apply();
+                        Diagnostics.setAddress(currentBase);
+                        if (!diagChecked) { diagChecked = true; Diagnostics.sendIfAny(currentBase); }   // crashes since last time, if any
+                    }
                     learnServer();
                 }
             }
@@ -216,6 +224,7 @@ public class MainActivity extends Activity {
              *  the queue from its saved copy. Gives up after 3 deaths within a minute (a page that always crashes). */
             @Override
             public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                Diagnostics.note("renderer gone, crashed=" + detail.didCrash() + " priority=" + detail.rendererPriorityAtExit());
                 recoverRenderer(view);
                 return true;
             }
@@ -282,9 +291,15 @@ public class MainActivity extends Activity {
                     main.post(() -> { if (web != null) web.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT); }); // back online: stop preferring the saved copy
                     main.removeCallbacks(repick); main.postDelayed(repick, 2000);
                 }
-                @Override public void onLost(Network n) { needRepick = true; }
+                @Override public void onLost(Network n) { needRepick = true; Diagnostics.note("network lost"); }
             });
         } catch (Exception ignored) { }
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_RUNNING_LOW) Diagnostics.note("trim memory level " + level);   // the phone is short of memory
     }
 
     @Override

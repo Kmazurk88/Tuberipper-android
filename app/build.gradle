@@ -8,8 +8,8 @@ android {
         minSdk 26
         // 34, not 35: Android 15 forces edge-to-edge on apps that target 35, which would draw the web page under the system bars.
         targetSdk 34
-        versionCode 9
-        versionName '1.8'
+        versionCode 10
+        versionName '1.9'
     }
     buildFeatures { buildConfig true }
     signingConfigs {

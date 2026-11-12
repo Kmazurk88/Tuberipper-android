@@ -85,6 +85,19 @@ public class NativeBridge {
         try { return new android.os.StatFs(ctx.getExternalFilesDir(null).getPath()).getAvailableBytes(); } catch (Exception e) { return 0; }
     }
 
+    /** "Send diagnostics" in the menu. Answers later through window.TRNative_diag(ok, message) in the page. */
+    @JavascriptInterface
+    public void sendDiagnostics(String note) {
+        MainActivity a = MainActivity.current();
+        final String base = a == null ? null : a.currentAddress();
+        Diagnostics.sendNow(base, note, (ok, message) -> {
+            final android.webkit.WebView w = MainActivity.page();
+            if (w == null) return;
+            final String js = "window.TRNative_diag&&window.TRNative_diag(" + ok + ",'" + message.replace("\\", "").replace("'", "").replace("\n", " ") + "')";
+            w.post(() -> w.evaluateJavascript(js, null));
+        });
+    }
+
     @JavascriptInterface
     public void clear() {
         main.post(() -> PlaybackService.stop(ctx));

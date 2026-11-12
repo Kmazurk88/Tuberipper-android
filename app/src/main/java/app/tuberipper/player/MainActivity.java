@@ -382,6 +382,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (isFinishing()) {
             PlaybackService.stop(this);
+            Engine.shutdown();
             web.destroy();
             web = null;
             if (currentRef.get() == this) currentRef = new WeakReference<>(null);

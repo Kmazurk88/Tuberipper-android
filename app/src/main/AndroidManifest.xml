@@ -29,6 +29,16 @@
             </intent-filter>
         </activity>
 
+        <!-- The native player's notification and lock-screen session (Media3). Not exported: only this app starts it. -->
+        <service
+            android:name=".NativePlayerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".PlaybackService"
             android:exported="false"

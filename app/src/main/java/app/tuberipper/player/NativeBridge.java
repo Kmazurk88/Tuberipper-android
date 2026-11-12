@@ -85,6 +85,11 @@ public class NativeBridge {
         try { return new android.os.StatFs(ctx.getExternalFilesDir(null).getPath()).getAvailableBytes(); } catch (Exception e) { return 0; }
     }
 
+    // ----- The native player (see Engine.java). The page uses it only when its "new player" setting is on. -----
+    @JavascriptInterface public int playerVersion() { return Engine.VERSION; }
+    @JavascriptInterface public void player(String json) { Engine.get(ctx).command(json); }
+    @JavascriptInterface public String playerState() { return Engine.get(ctx).stateJson(); }
+
     /** "Send diagnostics" in the menu. Answers later through window.TRNative_diag(ok, message) in the page. */
     @JavascriptInterface
     public void sendDiagnostics(String note) {
